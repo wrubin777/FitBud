@@ -8,7 +8,7 @@ class WorkoutsPage extends StatefulWidget {
 }
 
 class _WorkoutsPageState extends State<WorkoutsPage> {
-  final List<Map<String, String>> _workouts = []; // <-- Start with an empty list
+  final List<Map<String, String>> _workouts = [];
 
   void _showAddWorkoutDialog() async {
     final titleController = TextEditingController();
@@ -16,7 +16,6 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
     final minutesController = TextEditingController();
     DateTime? selectedDate;
 
-    // This will hold the new workout data
     Map<String, String>? newWorkout;
 
     await showDialog(
@@ -121,7 +120,6 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
       },
     );
 
-    // After dialog closes, add the workout if it was created
     if (newWorkout != null) {
       setState(() {
         _workouts.add(newWorkout!);
@@ -129,8 +127,39 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
     }
   }
 
+  // Helper to group workouts by week
+  Map<String, List<Map<String, String>>> _groupWorkoutsByWeek(List<Map<String, String>> workouts) {
+    Map<String, List<Map<String, String>>> grouped = {};
+    DateTime now = DateTime.now();
+    DateTime thisWeekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+    DateTime nextWeekStart = thisWeekStart.add(const Duration(days: 7));
+
+    bool isSameDay(DateTime a, DateTime b) =>
+        a.year == b.year && a.month == b.month && a.day == b.day;
+
+    for (var workout in workouts) {
+      if (workout['date'] == null) continue;
+      DateTime date = DateTime.parse(workout['date']!);
+      DateTime weekStart = DateTime(date.year, date.month, date.day).subtract(Duration(days: date.weekday - 1));
+      String weekLabel;
+      if (isSameDay(weekStart, thisWeekStart)) {
+        weekLabel = "This Week";
+      } else if (isSameDay(weekStart, nextWeekStart)) {
+        weekLabel = "Next Week";
+      } else if (weekStart.isAfter(nextWeekStart)) {
+        weekLabel = "Later On";
+      } else {
+        weekLabel = "Past Workouts";
+      }
+      grouped.putIfAbsent(weekLabel, () => []).add(workout);
+    }
+    return grouped;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final groupedWorkouts = _groupWorkoutsByWeek(_workouts);
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -161,18 +190,47 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
           ),
           const SizedBox(height: 24),
           Expanded(
-            child: ListView.separated(
-              itemCount: _workouts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final workout = _workouts[index];
-                return _WorkoutCard(
-                  title: workout['title'] ?? '',
-                  duration: workout['duration'] ?? '',
-                  date: workout['date'] ?? '',
-                );
-              },
-            ),
+            child: _workouts.isEmpty
+                ? Center(
+                    child: Text(
+                      "Add your workouts here!",
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.deepPurple[200],
+                        fontFamily: 'Montserrat',
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  )
+                : ListView(
+                    children: groupedWorkouts.entries.map((entry) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Text(
+                              entry.key,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.deepPurple,
+                              ),
+                            ),
+                          ),
+                          ...entry.value.map((workout) => Padding(
+                                padding: const EdgeInsets.only(bottom: 12.0),
+                                child: _WorkoutCard(
+                                  title: workout['title'] ?? '',
+                                  duration: workout['duration'] ?? '',
+                                  date: workout['date'] ?? '',
+                                ),
+                              )),
+                        ],
+                      );
+                    }).toList(),
+                  ),
           ),
         ],
       ),
@@ -207,7 +265,7 @@ class _WorkoutCard extends StatelessWidget {
         onTap: () {
           // TODO: Implement workout details navigation
         },
-      ),
+      )
     );
   }
 }

@@ -1,7 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import 'dart:async';
 
-class ActivityPage extends StatelessWidget {
+class ActivityPage extends StatefulWidget {
   const ActivityPage({super.key});
+
+  @override
+  State<ActivityPage> createState() => _ActivityPageState();
+}
+
+class _ActivityPageState extends State<ActivityPage> {
+  LatLng? _currentPosition;
+  late final MapController _mapController;
+  StreamSubscription<Position>? _positionSubscription;
+  bool _mapReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _mapController = MapController();
+    _startLocationUpdates();
+  }
+
+  void _startLocationUpdates() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return;
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return;
+    }
+    if (permission == LocationPermission.deniedForever) return;
+
+    // Get initial position
+    final position = await Geolocator.getCurrentPosition();
+    setState(() {
+      _currentPosition = LatLng(position.latitude, position.longitude);
+    });
+
+    // Listen to position updates and store the subscription
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+    ).listen((Position pos) {
+      final newLatLng = LatLng(pos.latitude, pos.longitude);
+      if (mounted) {
+        setState(() {
+          _currentPosition = newLatLng;
+        });
+        if (_mapReady) {
+          _mapController.move(newLatLng, _mapController.camera.zoom);
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _positionSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,20 +84,43 @@ class ActivityPage extends StatelessWidget {
           const SizedBox(height: 32),
           const Text('Today\'s Route', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
-          Container(
+          SizedBox(
             height: 200,
             width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.deepPurpleAccent.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.deepPurple),
-            ),
-            child: const Center(
-              child: Text(
-                '[Map Placeholder]',
-                style: TextStyle(color: Colors.deepPurple, fontSize: 18),
-              ),
-            ),
+            child: _currentPosition == null
+                ? const Center(child: CircularProgressIndicator())
+                : FlutterMap(
+                    mapController: _mapController,
+                    options: MapOptions(
+                      center: _currentPosition,
+                      zoom: 16,
+                      onMapReady: () {
+                        setState(() {
+                          _mapReady = true;
+                        });
+                      },
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.example.fitbud',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            width: 40,
+                            height: 40,
+                            point: _currentPosition!,
+                            child: const Icon(
+                              Icons.location_pin,
+                              color: Colors.red,
+                              size: 40,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),
