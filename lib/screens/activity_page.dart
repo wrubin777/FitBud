@@ -37,6 +37,7 @@ class _ActivityPageState extends State<ActivityPage> {
 
     // Get initial position
     final position = await Geolocator.getCurrentPosition();
+    if (!mounted) return; // <-- Add this line
     setState(() {
       _currentPosition = LatLng(position.latitude, position.longitude);
     });
@@ -45,21 +46,20 @@ class _ActivityPageState extends State<ActivityPage> {
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
     ).listen((Position pos) {
+      if (!mounted) return; // <-- Add this line for extra safety
       final newLatLng = LatLng(pos.latitude, pos.longitude);
-      if (mounted) {
-        setState(() {
-          _currentPosition = newLatLng;
-        });
-        if (_mapReady) {
-          _mapController.move(newLatLng, _mapController.camera.zoom);
-        }
+      setState(() {
+        _currentPosition = newLatLng;
+      });
+      if (_mapReady) {
+        _mapController.move(newLatLng, _mapController.camera.zoom);
       }
     });
   }
 
   @override
   void dispose() {
-    _positionSubscription?.cancel();
+    _positionSubscription?.cancel(); // <-- This prevents setState after dispose
     super.dispose();
   }
 

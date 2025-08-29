@@ -5,7 +5,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
 import 'package:timezone/data/latest.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
 
 class ProgressPage extends StatefulWidget {
   const ProgressPage({super.key});
@@ -15,7 +14,8 @@ class ProgressPage extends StatefulWidget {
 }
 
 class _ProgressPageState extends State<ProgressPage> {
-  final Map<String, File> _weeklyPhotos = {};
+  // Now a map of week -> list of files
+  final Map<String, List<File>> _weeklyPhotos = {};
   final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
 
   @override
@@ -42,21 +42,13 @@ class _ProgressPageState extends State<ProgressPage> {
     );
     const NotificationDetails notificationDetails = NotificationDetails(android: androidDetails);
 
-    // Schedule for next Monday at 10:00 AM
-    DateTime now = DateTime.now();
-    DateTime nextMonday = now.add(Duration(days: (8 - now.weekday) % 7));
-    DateTime notificationTime = DateTime(nextMonday.year, nextMonday.month, nextMonday.day, 10);
-
-    final tz.TZDateTime tzNotificationTime = tz.TZDateTime.from(notificationTime, tz.local);
-
-    await _notificationsPlugin.zonedSchedule(
+    await _notificationsPlugin.periodicallyShow(
       0,
       'Time for your progress photo!',
       'Take your weekly progress photo to track your journey.',
-      tzNotificationTime,
+      RepeatInterval.weekly,
       notificationDetails,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+      androidAllowWhileIdle: false,
     );
   }
 
@@ -66,10 +58,13 @@ class _ProgressPageState extends State<ProgressPage> {
     if (picked != null) {
       final directory = await getApplicationDocumentsDirectory();
       final weekStart = _getCurrentWeekStart();
-      final fileName = 'progress_${DateFormat('yyyyMMdd').format(weekStart)}.jpg';
+      final weekKey = DateFormat('yyyy-MM-dd').format(weekStart);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'progress_${weekKey}_$timestamp.jpg';
       final file = await File(picked.path).copy('${directory.path}/$fileName');
       setState(() {
-        _weeklyPhotos[DateFormat('yyyy-MM-dd').format(weekStart)] = file;
+        _weeklyPhotos.putIfAbsent(weekKey, () => []);
+        _weeklyPhotos[weekKey]!.add(file);
       });
     }
   }
@@ -82,8 +77,15 @@ class _ProgressPageState extends State<ProgressPage> {
   @override
   Widget build(BuildContext context) {
     final weekStart = _getCurrentWeekStart();
-    final weekLabel = "Week of ${DateFormat('yyyy-MM-dd').format(weekStart)}";
-    final photo = _weeklyPhotos[DateFormat('yyyy-MM-dd').format(weekStart)];
+    final weekKey = DateFormat('yyyy-MM-dd').format(weekStart);
+    final weekLabel = "Week of $weekKey";
+    final currentWeekPhotos = _weeklyPhotos[weekKey] ?? [];
+
+    // Get previous weeks sorted (most recent first)
+    final previousWeeks = _weeklyPhotos.keys
+        .where((k) => k != weekKey)
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -92,13 +94,28 @@ class _ProgressPageState extends State<ProgressPage> {
         children: [
           Text(weekLabel, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          photo != null
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.file(photo, height: 250, width: double.infinity, fit: BoxFit.cover),
+          currentWeekPhotos.isNotEmpty
+              ? SizedBox(
+                  height: 110,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: currentWeekPhotos.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, idx) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          currentWeekPhotos[idx],
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                        ),
+                      );
+                    },
+                  ),
                 )
               : Container(
-                  height: 250,
+                  height: 110,
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: Colors.grey[200],
@@ -107,7 +124,7 @@ class _ProgressPageState extends State<ProgressPage> {
                   ),
                   child: const Center(
                     child: Text(
-                      'No progress photo for this week.\nTap below to add one!',
+                      'No progress photos for this week.\nTap below to add one!',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.deepPurple, fontSize: 18),
                     ),
@@ -134,18 +151,34 @@ class _ProgressPageState extends State<ProgressPage> {
           const Divider(),
           const SizedBox(height: 16),
           const Text('Previous Progress Photos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ..._weeklyPhotos.entries
-              .where((entry) => entry.key != DateFormat('yyyy-MM-dd').format(weekStart))
-              .map((entry) => Padding(
+          ...previousWeeks.map((week) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: ListTile(
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(entry.value, width: 50, height: 50, fit: BoxFit.cover),
-                      ),
-                      title: Text('Week of ${entry.key}'),
+                    child: Text('Week of $week', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  SizedBox(
+                    height: 80,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _weeklyPhotos[week]!.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, idx) {
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(
+                            _weeklyPhotos[week]![idx],
+                            width: 70,
+                            height: 70,
+                            fit: BoxFit.cover,
+                          ),
+                        );
+                      },
                     ),
-                  )),
+                  ),
+                ],
+              )),
         ],
       ),
     );

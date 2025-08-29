@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 
+// Example exercise images (replace with your own asset paths or URLs)
+const Map<String, String> exerciseImages = {
+  'Push Ups': 'https://www.verywellfit.com/thmb/8wQn8nQwQwQwQwQwQwQwQwQwQ=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/pushup-steps-illustrated-3120081-07-5b7b6b8dc9e77c0050c7a0e4.png',
+  'Squats': 'https://www.verywellfit.com/thmb/8wQn8nQwQwQwQwQwQwQwQwQwQ=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/squat-steps-illustrated-3120082-07-5b7b6b8dc9e77c0050c7a0e4.png',
+  // Add more mappings as needed
+};
+
 class WorkoutsPage extends StatefulWidget {
   const WorkoutsPage({super.key});
 
@@ -8,15 +15,16 @@ class WorkoutsPage extends StatefulWidget {
 }
 
 class _WorkoutsPageState extends State<WorkoutsPage> {
-  final List<Map<String, String>> _workouts = [];
+  final List<Map<String, dynamic>> _workouts = [];
 
   void _showAddWorkoutDialog() async {
     final titleController = TextEditingController();
     final hoursController = TextEditingController();
     final minutesController = TextEditingController();
+    final routineController = TextEditingController();
     DateTime? selectedDate;
 
-    Map<String, String>? newWorkout;
+    Map<String, dynamic>? newWorkout;
 
     await showDialog(
       context: context,
@@ -57,6 +65,14 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: routineController,
+                      decoration: const InputDecoration(
+                        labelText: 'Routine (one step per line)',
+                      ),
+                      maxLines: 4,
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -102,11 +118,16 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
                     final date = selectedDate != null
                         ? '${selectedDate!.year.toString().padLeft(4, '0')}-${selectedDate!.month.toString().padLeft(2, '0')}-${selectedDate!.day.toString().padLeft(2, '0')}'
                         : '';
+                    final routine = routineController.text
+                        .split('\n')
+                        .where((s) => s.trim().isNotEmpty)
+                        .toList();
                     if (title.isNotEmpty && (hours > 0 || minutes > 0) && date.isNotEmpty) {
                       newWorkout = {
                         'title': title,
                         'duration': '${hours > 0 ? '$hours h ' : ''}${minutes > 0 ? '$minutes min' : ''}'.trim(),
                         'date': date,
+                        'routine': routine,
                       };
                       Navigator.of(context).pop();
                     }
@@ -128,8 +149,8 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
   }
 
   // Helper to group workouts by week
-  Map<String, List<Map<String, String>>> _groupWorkoutsByWeek(List<Map<String, String>> workouts) {
-    Map<String, List<Map<String, String>>> grouped = {};
+  Map<String, List<Map<String, dynamic>>> _groupWorkoutsByWeek(List<Map<String, dynamic>> workouts) {
+    Map<String, List<Map<String, dynamic>>> grouped = {};
     DateTime now = DateTime.now();
     DateTime thisWeekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
     DateTime nextWeekStart = thisWeekStart.add(const Duration(days: 7));
@@ -154,6 +175,22 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
       grouped.putIfAbsent(weekLabel, () => []).add(workout);
     }
     return grouped;
+  }
+
+  void _openWorkoutDetail(Map<String, dynamic> workout) async {
+    final updatedRoutine = await Navigator.push<List<String>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WorkoutDetailPage(
+          workout: workout,
+        ),
+      ),
+    );
+    if (updatedRoutine != null) {
+      setState(() {
+        workout['routine'] = updatedRoutine;
+      });
+    }
   }
 
   @override
@@ -225,6 +262,7 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
                                   title: workout['title'] ?? '',
                                   duration: workout['duration'] ?? '',
                                   date: workout['date'] ?? '',
+                                  onTap: () => _openWorkoutDetail(workout),
                                 ),
                               )),
                         ],
@@ -242,11 +280,13 @@ class _WorkoutCard extends StatelessWidget {
   final String title;
   final String duration;
   final String date;
+  final VoidCallback? onTap;
 
   const _WorkoutCard({
     required this.title,
     required this.duration,
     required this.date,
+    this.onTap,
   });
 
   @override
@@ -262,10 +302,105 @@ class _WorkoutCard extends StatelessWidget {
         ),
         subtitle: Text('$duration • $date'),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          // TODO: Implement workout details navigation
-        },
+        onTap: onTap,
       )
+    );
+  }
+}
+
+// --- Workout Detail Page ---
+
+class WorkoutDetailPage extends StatefulWidget {
+  final Map<String, dynamic> workout;
+
+  const WorkoutDetailPage({super.key, required this.workout});
+
+  @override
+  State<WorkoutDetailPage> createState() => _WorkoutDetailPageState();
+}
+
+class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
+  late List<String> routine;
+  bool isEditing = false;
+  late TextEditingController routineController;
+
+  @override
+  void initState() {
+    super.initState();
+    routine = List<String>.from(widget.workout['routine'] ?? []);
+    routineController = TextEditingController(text: routine.join('\n'));
+  }
+
+  @override
+  void dispose() {
+    routineController.dispose();
+    super.dispose();
+  }
+
+  Widget _exerciseTile(String exercise) {
+    final imageUrl = exerciseImages[exercise.trim()];
+    return Card(
+      child: ListTile(
+        leading: imageUrl != null
+            ? Image.network(imageUrl, width: 48, height: 48, fit: BoxFit.cover)
+            : const Icon(Icons.image_not_supported, size: 48, color: Colors.grey),
+        title: Text(exercise),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.workout['title']),
+        actions: [
+          IconButton(
+            icon: Icon(isEditing ? Icons.save : Icons.edit),
+            onPressed: () {
+              if (isEditing) {
+                setState(() {
+                  routine = routineController.text
+                      .split('\n')
+                      .where((s) => s.trim().isNotEmpty)
+                      .toList();
+                  isEditing = false;
+                  // Do NOT pop the page here!
+                  // Navigator.of(context).pop(routine); // <-- Remove this line
+                  widget.workout['routine'] = routine; // Update the workout in place
+                });
+              } else {
+                setState(() {
+                  isEditing = true;
+                });
+              }
+            },
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: isEditing
+            ? TextField(
+                controller: routineController,
+                decoration: const InputDecoration(
+                  labelText: 'Edit Routine (one step per line)',
+                ),
+                maxLines: 12,
+              )
+            : ListView(
+                children: routine.isEmpty
+                    ? [
+                        const Center(
+                          child: Text(
+                            'No routine steps added.',
+                            style: TextStyle(fontSize: 18, color: Colors.deepPurple),
+                          ),
+                        )
+                      ]
+                    : routine.map(_exerciseTile).toList(),
+              ),
+      ),
     );
   }
 }

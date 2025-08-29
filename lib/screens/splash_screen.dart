@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'dart:math' as math;
+import 'dart:io';
+
+import '../main.dart'; // Import where requestNotificationPermission is defined
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -18,6 +22,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   @override
   void initState() {
     super.initState();
+    requestNotificationPermission();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 5),
