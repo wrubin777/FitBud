@@ -9,6 +9,10 @@ import 'screens/splash_screen.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
+import 'screens/post_register_splash.dart';
+import 'screens/personal_info_page.dart';
+import 'screens/fitness_goals_page.dart';
+import 'screens/workout_frequency_page.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -58,6 +62,10 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
+        '/postregistersplash': (context) => const PostRegisterSplash(),
+        '/personalinfo': (context) => const PersonalInfoPage(),
+        '/fitnessgoals': (context) => const FitnessGoalsPage(),
+        '/workoutfrequency': (context) => const WorkoutFrequencyPage(),
         '/main': (context) => const MainPage(),
       },
     );

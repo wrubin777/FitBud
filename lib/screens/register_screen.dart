@@ -66,6 +66,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ElevatedButton(
                 onPressed: () {
                   // TODO: Implement registration logic
+                  // After successful registration:
+                  Navigator.pushReplacementNamed(context, '/postregistersplash');
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.deepPurple,
